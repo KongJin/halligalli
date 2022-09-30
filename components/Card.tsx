@@ -1,16 +1,10 @@
 import { deck } from "@/libs/const";
+import { useEffect } from "react";
 import styled from "styled-components";
 
 const Container = styled.div``;
-const CardImg = styled.img`
-  width: 90%;
-`;
+const CardImg = styled.img``;
 
-export default function Card({ index }: { index: number }) {
-  console.log(deck.length);
-  return (
-    <Container>
-      <CardImg src={deck[index]}></CardImg>
-    </Container>
-  );
+export default function Card({ img }: { img: string }) {
+  return <Container>{img ? <CardImg src={img}></CardImg> : null}</Container>;
 }

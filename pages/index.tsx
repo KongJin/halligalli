@@ -41,9 +41,7 @@ const Home: NextPage = () => {
   );
 };
 
-export async function getServerSideProps(
-  context: GetSessionParams | undefined
-) {
+export async function getServerSideProps(context: GetSessionParams | undefined) {
   const providers = await getProviders();
   const session = await getSession(context);
 
