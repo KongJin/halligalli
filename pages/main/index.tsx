@@ -2,7 +2,6 @@ import { socket } from "@/libs/function";
 import type { NextPage } from "next";
 import router from "next/router";
 import { useEffect, useState } from "react";
-import styles from "../../styles/Home.module.css";
 
 const MainPage: NextPage = () => {
   const [roomList, setRoomList] = useState<any>([]);
@@ -28,8 +27,8 @@ const MainPage: NextPage = () => {
   }, []);
 
   return (
-    <main className={styles.main}>
-      <h1 className={styles.title}>Welcome to HalliGalli</h1>
+    <main>
+      <h1>Welcome to HalliGalli</h1>
       <div>
         <h2>방 목록</h2>
         <ul>
