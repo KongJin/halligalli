@@ -1,7 +1,8 @@
 import Card from "@/components/Card";
-import { deck as initDeck } from "@/libs/const";
+import { socket } from "@/libs/function";
 import { NextPage } from "next";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 
 const Container = styled.div`
@@ -36,31 +37,31 @@ const Board = styled.div`
   &.card1 {
     grid-column: 2;
     transform: rotate(135deg);
-    height: 100px;
-    width: 80px;
+    height: 80px;
+    width: 60px;
     top: -15px;
   }
   &.card2 {
     grid-column: 4;
     transform: rotate(-135deg);
-    height: 100px;
-    width: 80px;
+    height: 80px;
+    width: 60px;
     top: -15px;
   }
   &.card3 {
     grid-row: 4;
     grid-column: 2;
     transform: rotate(45deg);
-    height: 100px;
-    width: 80px;
+    height: 80px;
+    width: 60px;
     top: -15px;
   }
   &.card4 {
     grid-row: 4;
     grid-column: 4;
     transform: rotate(-45deg);
-    height: 100px;
-    width: 80px;
+    height: 80px;
+    width: 60px;
     top: -15px;
   }
   &.center {
@@ -69,62 +70,195 @@ const Board = styled.div`
     grid-column: 3;
   }
 `;
+
 const GamePage: NextPage = () => {
-  const [assets, setAssets] = useState<string[][]>([[], [], [], []]);
-  const [invest, setInvest] = useState<string[][]>([[], [], [], []]);
+  const Router = useRouter();
+  const users = useRef<string[]>([]);
+  const me = useRef<string>("");
+  const roomId = Router.query.roomId;
+  const assets = useRef<{ img: string; type: string; cnt: number }[][]>([[], [], [], []]);
+  const invest = useRef<{ img: string; type: string; cnt: number }[][]>([[], [], [], []]);
+  const startCNT = useRef(7);
+  const turn = useRef(99);
+  const [st, setSt] = useState(99);
+  let sI: NodeJS.Timer;
+  let tI: NodeJS.Timer;
+  console.log({ users: users.current, turn: turn.current, me: me.current, roomId: roomId });
+
+  useEffect(() => {}, [st]);
 
   useEffect(() => {
-    distribute();
-  }, []);
-  function distribute() {
-    let assets: string[][] = [[], [], [], []];
-    if (initDeck.length > 0) {
-      for (let i = 0; i < 14; i++) {
-        for (let j = 0; j < 4; j++) {
-          let random = Math.floor(Math.random() * initDeck.length);
-          assets[j].push(initDeck[random]);
-          initDeck.splice(random, 1);
+    socket.emit("enter_room", roomId, (socketId: string) => {
+      if (socketId !== me.current) {
+        me.current = socketId;
+      }
+    });
+    socket.on("update_users", (people: string[]) => {
+      console.log({ people });
+      users.current = people;
+    });
+    socket.on("count", (people: string[]) => {
+      users.current = people;
+      startCNT.current = 7;
+      clearInterval(sI);
+      if (users.current.length > 1) {
+        sI = setInterval(() => {
+          startCNT.current -= 1;
+          console.log(startCNT);
+          if (startCNT.current < 1) {
+            clearInterval(sI);
+            if (users.current[0] === me.current) {
+              socket.emit("start_room", roomId);
+            }
+          }
+        }, 1000);
+      }
+    });
+    socket.on("distribute", (set: any) => {
+      console.log("distribute");
+      assets.current = set;
+      turn.current = -1;
+
+      setSt(turn.current);
+    });
+    socket.on("turn", () => {
+      clearInterval(tI);
+      play();
+      tI = setInterval(() => {
+        play();
+      }, 2000);
+    });
+    socket.on("bellResult", (socketId, result) => {
+      if (result === "bringMe") {
+        let bringCard = [];
+        for (let i in invest.current) {
+          if (invest.current[i]) {
+            bringCard.push(...invest.current[i]);
+            invest.current[i] = [];
+          }
+        }
+        assets.current[users.current.indexOf(socketId)].unshift(...bringCard);
+      } else if (result === "giveUs") {
+        for (let i in users.current) {
+          if (users.current[i] !== "") {
+            let pay = assets.current[users.current.indexOf(socketId)].pop();
+
+            pay && assets.current[i].push(pay);
+          }
         }
       }
-      setAssets(assets);
-    }
-  }
-
-  const play = (user: number) => {
-    let newInvest = JSON.parse(JSON.stringify(invest));
-    newInvest[user].push(assets[user][assets[user].length - 1]);
-    console.log({ assets, invest });
-    setAssets((prev) => {
-      let a = JSON.parse(JSON.stringify(prev));
-      console.log({ a });
-      a[user].pop();
-      console.log({ a });
-      return a;
+      setSt(99);
     });
-    setInvest(newInvest);
-    console.log({ assets, invest });
+
+    return () => {
+      clearInterval(sI);
+      clearInterval(tI);
+      socket.off("update_users");
+      socket.off("count");
+      socket.off("distribute");
+      socket.off("turn");
+      socket.off("bellResult");
+      socket.emit("out_room", roomId);
+    };
+  }, []);
+
+  const play = () => {
+    let i = turn.current + 1;
+    while (users.current[i % users.current.length] === "") {
+      i++;
+    }
+    turn.current = i % users.current.length;
+    let pay = assets.current[turn.current].pop();
+    if (!pay) {
+      users.current[turn.current] = "";
+    }
+    let liver = users.current.filter((el) => el !== "");
+    if (liver.length === 1) {
+      console.log("user" + liver[0] + "가 승리했습니다.");
+
+      invest.current = [[], [], [], []];
+      if (liver[0] === me.current) {
+        socket.emit("end_room", roomId);
+      }
+      clearInterval(sI);
+      clearInterval(tI);
+      setSt(turn.current);
+      return;
+    }
+    pay && invest.current[turn.current].push(pay);
+    setSt(turn.current);
+    console.log("@@");
   };
+
   return (
     <Container>
       <Board className="user1"></Board>
       <Board className="user2"></Board>
-      <Board className="card1" onClick={() => play(0)}>
-        <Card img={invest[0][invest[0].length - 1]} />
+      <Board className="card1">
+        {assets.current[0].length}
+        <Card obj={invest.current[0][invest.current[0].length - 1]} />
       </Board>
-      <Board className="card2" onClick={() => play(1)}>
-        <Card img={invest[1][invest[1].length - 1]} />
+      <Board className="card2">
+        {assets.current[1].length}
+        <Card obj={invest.current[1][invest.current[1].length - 1]} />
       </Board>
-      <Board className="center"></Board>
-      <Board className="card3" onClick={() => play(2)}>
-        <Card img={invest[2][invest[2].length - 1]} />
+      <Board className="center">
+        <button
+          onClick={() => {
+            let card: { [type: string]: number } = {};
+            for (let i = 0; i < invest.current.length; i++) {
+              let top = invest.current[i][invest.current[i].length - 1];
+              if (top) {
+                card[top.type] = (card[top.type] + top.cnt) | top.cnt;
+              }
+            }
+            for (let i in card) {
+              console.log(card[i]);
+              if (card[i] === 5) {
+                return socket.emit("bell", roomId, "bringMe");
+              }
+            }
+            return socket.emit("bell", roomId, "giveUs");
+          }}
+        >
+          종 울리기
+        </button>
       </Board>
-      <Board className="card4" onClick={() => play(3)}>
-        <Card img={invest[3][invest[3].length - 1]} />
+      <Board className="card3">
+        <Card obj={invest.current[2][invest.current[2].length - 1]} />
+        {assets.current[2].length}
+      </Board>
+      <Board className="card4">
+        <Card obj={invest.current[3][invest.current[3].length - 1]} />
+        {assets.current[3].length}
       </Board>
       <Board className="user3"></Board>
       <Board className="user4"></Board>
+      {
+        <button
+          onClick={() => {
+            let i = turn.current + 1;
+            while (users.current[i % users.current.length] === "") {
+              i++;
+            }
+            if (users.current[i % users.current.length] === me.current) {
+              socket.emit("turnRe", roomId);
+            }
+          }}
+        >
+          카드 내기
+        </button>
+      }
     </Container>
   );
 };
 
 export default GamePage;
+
+export async function getServerSideProps({ query: { roomId } }: { query: { roomId: string } }) {
+  return {
+    props: {
+      roomId,
+    },
+  };
+}

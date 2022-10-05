@@ -4,8 +4,6 @@ import KakaoProvider from "next-auth/providers/kakao";
 import FacebookProvider from "next-auth/providers/facebook";
 import prisma from "@libs/prisma";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { verifyString } from "@libs/auth";
-import { emailCheck, exclude } from "@/libs/function";
 
 export default NextAuth({
   providers: [

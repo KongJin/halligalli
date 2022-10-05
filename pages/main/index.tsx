@@ -7,8 +7,10 @@ const MainPage: NextPage = () => {
   const [roomList, setRoomList] = useState<any>([]);
   const fetchData = () => {
     socket.emit("enter_lobby", (data: any) => {
-      console.log({ data });
       setRoomList(data);
+    });
+    socket.on("connect", () => {
+      console.log(socket.connected); //
     });
   };
 
@@ -16,14 +18,21 @@ const MainPage: NextPage = () => {
   const findRoom = () => {
     const room = roomList.find((room: any) => {
       if (room) {
-        return room.started === false;
+        return room.started === false && room.people.length < 4;
       }
     });
     return room;
   };
 
   useEffect(() => {
+    socket.connect();
     fetchData();
+    socket.on("update_roomList", (data: any) => {
+      setRoomList(data);
+    });
+    return () => {
+      socket.off("update_roomList");
+    };
   }, []);
 
   return (
@@ -32,22 +41,27 @@ const MainPage: NextPage = () => {
       <div>
         <h2>방 목록</h2>
         <ul>
-          {roomList?.map((room: any) => {
-            if (room) {
-              return (
-                <li key={room.id}>
-                  <button
-                    onClick={() => {
-                      socket.emit("enter_room", room.id);
-                      router.push(`/main/${room.id}`);
-                    }}
-                  >
-                    {room.roomName}
-                  </button>
-                </li>
-              );
-            }
-          })}
+          {roomList
+            ?.filter((room: any) => {
+              if (room) {
+                return room.started === false && room.people.length < 4;
+              }
+            })
+            .map((room: any) => {
+              if (room) {
+                return (
+                  <li key={room.id}>
+                    <button
+                      onClick={() => {
+                        router.push(`/main/${room.id}`);
+                      }}
+                    >
+                      {room.roomName}
+                    </button>
+                  </li>
+                );
+              }
+            })}
         </ul>
       </div>
 
@@ -55,11 +69,10 @@ const MainPage: NextPage = () => {
         onClick={() => {
           const room = findRoom();
           if (room) {
-            socket.emit("enter_room", room.id);
             router.push(`/main/${room.id}`);
           } else {
-            socket.emit("create_room", (data: any) => {
-              router.push(`/main/${data.id}`);
+            socket.emit("create_room", (roomId: any) => {
+              router.push(`/main/${roomId}`);
             });
           }
         }}
